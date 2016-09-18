@@ -7,15 +7,15 @@ class A(Plugin):
 
 
 class B(Plugin):
-    a = Dep(A)
+    a = A
 
     def process(self):
         self.log.info(self.a)
 
 
 class C(Plugin):
-    a = Dep(A)
-    b = Dep(B)
+    a = A
+    b = B
 
     def process(self):
         self.log.info(self.a)
@@ -32,7 +32,7 @@ class D(Plugin):
 
 
 class E(Plugin):
-    d = Dep(D)
+    d = D
 
     def process(self):
         self.log.info(self.d)

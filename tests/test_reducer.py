@@ -1,4 +1,4 @@
-from engine.plugin import Dep, Plugin, PluginFactory, reducer
+from engine.plugin import Plugin, PluginFactory, reducer
 from unittest import TestCase
 
 
@@ -7,7 +7,7 @@ class A(Plugin):
 
 
 class B(Plugin):
-    a = Dep(A)
+    a = A
 
     def process(self):
         self.log.info(self.a)

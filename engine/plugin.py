@@ -108,14 +108,18 @@ class ClusterPlugin(Plugin):
 
 
 class Dep(object):
-    '''Helper class for specifying dependencies with @reducer'''
+    '''Helper class for specifying dependencies so that Dependency
+       and ClusterDependency never have to be used directly.'''
     def __init__(self, plugin, **kwargs):
         self.plugin = plugin
         self.kwargs = kwargs
 
 
 class Dependency(object):
-    '''Encapsulates a dependency between plugins.'''
+    '''Encapsulates a dependency between plugins.
+
+       A dependency may exist between Plugin <-> Plugin
+       or ClusterPlugin <-> ClusterPlugin but never mixed.'''
 
     def __init__(self, plugin, name=None, optional=False, on_error=False):
         self.plugin = plugin
@@ -133,6 +137,11 @@ class ClusterDependency(Dependency):
 
 
 class PluginFactory(object):
+    ''' Subclass of PluginFactory would override create so that
+        certain plugins would be created based on file
+        availability in an archive.  multi_output files would yield
+        an instance of P per relevant file.
+    '''
 
     def create(self, P):
         yield P()
@@ -211,9 +220,14 @@ class PluginFactory(object):
 
 
 class ClusterPluginFactory(PluginFactory):
+    '''ClusterPluginFactory should be initialized with a set of graphs
+       that are the result of PluginFactory.run_plugins calls for each
+       archive in a cluster archive.  This would then be used to satisfy
+       the ClusterDependency requirements of ClusterPlugins.
+    '''
 
-    def __init__(self, role_graph):
-        self.role_graph = role_graph
+    def __init__(self, graphs):
+        self.graphs = graphs
 
     @property
     def plugins(self):
@@ -222,12 +236,12 @@ class ClusterPluginFactory(PluginFactory):
     def resolve_deps(self, P, graph):
         log.debug('Resolving %s', P.__name__)
         log.debug('DependsOn: %s', P.__requires__)
-        log.debug('Role Graph: %s', self.role_graph)
+        log.debug('Role Graph: %s', self.graphs)
         log.debug('Graph: %s', graph)
         deps = {}
         for n, d in P.__requires__.iteritems():
             if isinstance(d, ClusterDependency):
-                # dig things out of self.role_graph
+                # dig things out of self.graphs for the deps
                 pass
             else:
                 deps[n] = self.resolve_dep(n, d, graph)
@@ -236,7 +250,10 @@ class ClusterPluginFactory(PluginFactory):
 
 def reducer(requires=[], kind=Plugin):
     '''Syntactic sugar.
-    Decorator for creating plugins out of functions.
+       Decorator for creating plugins out of functions.
+       Leave kind as Plugin for regular plugins and set
+       to ClusterPlugin for plugins that should work on
+       cluster archives.
     '''
 
     def wrapper(func):

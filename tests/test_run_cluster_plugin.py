@@ -41,9 +41,11 @@ class E(Plugin):
     def process(self):
         self.log.info(self.d)
 
+
 @reducer(kind=ClusterPlugin)
 def reduceA(shared):
     log.info(shared)
+
 
 @reducer(requires=[reduceA], kind=ClusterPlugin)
 def reduceB(shared):
@@ -53,7 +55,17 @@ def reduceB(shared):
 class TestRunPlugins(TestCase):
 
     def test_run_plugins(self):
+        # the idea here is for cluster archives.  A subclass
+        # of PluginFactory that will create the appropriate plugins
+        # based on file availability will be created for each archive
+        # in the cluster archive, and the graph of each run_plugins
+        # call for those archives will be accumulated and passed
+        # to the ClusterPluginFactory, which will run the ClusterPlugins
+        # each PluginFactory graph is a dictionary of the form
+        # {PluginClass: PluginClass instance(s)}
+
         graph = PluginFactory().run_plugins()
         self.assertTrue(not any(p._exception for p in graph.values()))
-        graph = ClusterPluginFactory(graph).run_plugins()
+        graphs = {'some_role?': graph}
+        graph = ClusterPluginFactory(graphs).run_plugins()
         self.assertTrue(not any(p._exception for p in graph.values()))

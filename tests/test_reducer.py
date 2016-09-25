@@ -34,11 +34,7 @@ def red(shared):
 @reducer(requires=[[B, C]])
 def D(shared):
     shared.log.info(shared.b)
-
-
-#@reducer(requires=[C])
-#def E(shared):
-#    shared.log.info(shared.b)
+    shared.log.info(shared.c)
 
 
 class TestRunPlugins(TestCase):
@@ -52,4 +48,3 @@ class TestRunPlugins(TestCase):
         self.assertTrue(D in graph)
         self.assertTrue(graph[D].b is not None)
         self.assertTrue(graph[D].c is None)
-

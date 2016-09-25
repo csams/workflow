@@ -1,10 +1,4 @@
 #!/usr/bin/env python
-'''
-
-
-
-
-'''
 
 import collections
 import logging
@@ -132,6 +126,9 @@ class ClusterPlugin(Plugin):
 
 
 class Policy(object):
+    ''' Base classes specify whether any or all of a set of dependencies
+        are required.
+    '''
     def __init__(self, **kwargs):
         self.deps = kwargs
 
@@ -150,8 +147,10 @@ class All(Policy):
 
 
 class Dep(object):
-    '''Helper class for specifying dependencies so that Dependency
-       and ClusterDependency never have to be used directly.'''
+    ''' Sugar class for specifying dependencies.
+
+        Used so that Dependency and ClusterDependency never have to be used directly.
+    '''
     def __init__(self, plugin, **kwargs):
         self.plugin = plugin
         self.kwargs = kwargs
@@ -211,11 +210,14 @@ class PluginFactory(object):
     def create(self, P):
         yield P()
 
+    def run_plugin(self, p):
+        return p.process()
+
     @property
     def plugins(self):
         return Registry.registry
 
-    def verify_deps(self, P, deps, graph):
+    def verify_deps(self, P, deps):
         if P.__policies__:
             return all([p.accept(deps) for p in P.__policies__])
         return True
@@ -249,9 +251,6 @@ class PluginFactory(object):
                 stack.append(cur)
                 stack.extend(deps)
 
-    def run_plugin(self, p):
-        return p.process()
-
     def _run_plugin(self, P, deps):
         ps = []
         for p in self.create(P):
@@ -275,7 +274,7 @@ class PluginFactory(object):
                 if not P.enabled:
                     continue
                 deps = self.resolve_deps(P, graph)
-                if not self.verify_deps(P, deps, graph):
+                if not self.verify_deps(P, deps):
                     continue
                 results = self._run_plugin(P, deps)
                 if results:

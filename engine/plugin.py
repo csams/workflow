@@ -1,7 +1,8 @@
 #!/usr/bin/env python
+import collections
 import logging
-from types import MethodType
 import sys
+from types import MethodType
 
 log = logging.getLogger(__name__)
 
@@ -13,17 +14,33 @@ class Registry(type):
     def __init__(plugin_class, name, bases, attrs):
         if name not in ('Plugin', 'ClusterPlugin'):
             plugin_class._register(Registry)
+
             requires = {}
             for k, v in attrs.iteritems():
                 d = plugin_class.create_dependency(v)
                 if d:
+                    d.name = k
                     requires[k] = d
+
+            for policy in plugin_class.__policies__:
+                wrapped = set()
+                for k, v in policy.deps.iteritems():
+                    d = plugin_class.create_dependency(v)
+                    if d:
+                        d.name = k
+                        d.optional = True
+                        wrapped.add(d)
+                        requires[k] = d
+                policy.deps = wrapped
             plugin_class.__requires__ = requires
             super(Registry, plugin_class).__init__(name, bases, attrs)
 
 
 class Plugin(object):
     __metaclass__ = Registry
+    __policies__ = []
+
+    enabled = True
 
     def __init__(self):
         self._data = {}
@@ -107,6 +124,24 @@ class ClusterPlugin(Plugin):
         return None
 
 
+class Policy(object):
+    def __init__(self, **kwargs):
+        self.deps = kwargs
+
+    def accept(self, factory, deps, graph):
+        return True
+
+
+class Any(Policy):
+    def accept(self, factory, resolved_deps, graph):
+        return any(factory.dependency_met(d, graph) for d in self.deps)
+
+
+class All(Policy):
+    def accept(self, factory, resolved_deps, graph):
+        return all(factory.dependency_met(d, graph) for d in self.deps)
+
+
 class Dep(object):
     '''Helper class for specifying dependencies so that Dependency
        and ClusterDependency never have to be used directly.'''
@@ -150,16 +185,24 @@ class PluginFactory(object):
     def plugins(self):
         return Registry.registry
 
-    def resolve_dep(self, name, dep, graph):
+    def dependency_met(self, dep, graph):
+        return dep.plugin in graph
+
+    def verify_deps(self, P, deps, graph):
+        if P.__policies__:
+            return all([p.accept(self, deps, graph) for p in P.__policies__])
+        return True
+
+    def resolve_dep(self, dep, graph):
         if dep.plugin not in graph:
             if dep.optional:
                 dp = None
             else:
-                raise Exception('Missing Dependency: %s' % name)
+                raise Exception('Missing Dependency: %s' % dep.name)
         else:
             dp = graph[dep.plugin]
             if dp._exception and not dep.on_error:
-                raise Exception('Dependency has exception: %s' % name)
+                raise Exception('Dependency has exception: %s' % dep.name)
         return dp
 
     def resolve_deps(self, P, graph):
@@ -168,12 +211,13 @@ class PluginFactory(object):
         log.debug('Graph: %s', graph)
         deps = {}
         for n, d in P.__requires__.iteritems():
-            deps[n] = self.resolve_dep(n, d, graph)
+            deps[n] = self.resolve_dep(d, graph)
         log.debug('ResolvedDeps: %s', deps)
         return deps
 
     @staticmethod
     def run_order(plugins):
+        plugins = list(plugins)
         stack = []
         seen = set()
         while plugins or stack:
@@ -210,7 +254,11 @@ class PluginFactory(object):
         graph = {}
         for P in self.run_order(self.plugins):
             try:
+                if not P.enabled:
+                    continue
                 deps = self.resolve_deps(P, graph)
+                if not self.verify_deps(P, deps, graph):
+                    continue
                 results = self.run_plugin(P, deps)
                 if results:
                     graph[P] = results if len(results) > 1 else results[0]
@@ -244,9 +292,10 @@ class ClusterPluginFactory(PluginFactory):
                 # dig things out of self.graphs for the deps
                 pass
             else:
-                deps[n] = self.resolve_dep(n, d, graph)
+                deps[n] = self.resolve_dep(d, graph)
         log.debug('ResolvedDeps: %s', deps)
         return deps
+
 
 def reducer(requires=[], kind=Plugin):
     '''Syntactic sugar.
@@ -258,12 +307,22 @@ def reducer(requires=[], kind=Plugin):
 
     def wrapper(func):
         attrs = {}
+        policies = []
         for r in requires:
-            r = kind.create_dependency(r)
-            if r:
-                name = r.name if r.name else r.plugin.__name__.lower()
-                attrs[name] = r
+            if isinstance(r, Policy):
+                policies.append(r)
+            elif isinstance(r, collections.Iterable):
+                args = {}
+                for a in r:
+                    args[a.__name__.lower()] = a
+                policies.append(Any(**args))
+            else:
+                r = kind.create_dependency(r)
+                if r:
+                    name = r.name if r.name else r.plugin.__name__.lower()
+                    attrs[name] = r
         attrs['__module__'] = func.__module__
+        attrs['__policies__'] = policies
         cls = type(func.__name__, (kind,), attrs)
         cls.process = MethodType(func, None, cls)
         mod = sys.modules[func.__module__]

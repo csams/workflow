@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+'''
+
+
+
+
+'''
+
 import collections
 import logging
 import sys
@@ -128,18 +135,18 @@ class Policy(object):
     def __init__(self, **kwargs):
         self.deps = kwargs
 
-    def accept(self, factory, deps, graph):
+    def accept(self, deps):
         return True
 
 
 class Any(Policy):
-    def accept(self, factory, resolved_deps, graph):
-        return any(factory.dependency_met(d, graph) for d in self.deps)
+    def accept(self, resolved_deps):
+        return any(d.met(resolved_deps) for d in self.deps)
 
 
 class All(Policy):
-    def accept(self, factory, resolved_deps, graph):
-        return all(factory.dependency_met(d, graph) for d in self.deps)
+    def accept(self, resolved_deps):
+        return all(d.met(resolved_deps) for d in self.deps)
 
 
 class Dep(object):
@@ -162,6 +169,26 @@ class Dependency(object):
         self.optional = optional
         self.on_error = on_error
 
+    def resolve(self, factory, graph):
+        plugin_name = '.'.join([self.plugin.__module__, self.plugin.__name__])
+        if self.plugin in graph:
+            dp = graph[self.plugin]
+            if dp._exception and not self.on_error:
+                raise Exception('Dependency has exception: %s' % plugin_name)
+        else:
+            if self.optional:
+                dp = None
+            else:
+                raise Exception('Missing Dependency: %s' % plugin_name)
+        return dp
+
+    def met(self, deps):
+        dep_classes = set(dep.__class__ for dep in deps.values() if dep)
+        if self.plugin in dep_classes:
+            return True
+
+        return False
+
 
 class ClusterDependency(Dependency):
     '''Encapsulates a dependency between a ClusterPlugin and previous execution graphs.'''
@@ -170,12 +197,15 @@ class ClusterDependency(Dependency):
         self.role = role
         super(ClusterDependency, self).__init__(plugin, **kwargs)
 
+    def resolve(self, factory, graph):
+        return None
+
 
 class PluginFactory(object):
-    ''' Subclass of PluginFactory would override create so that
-        certain plugins would be created based on file
-        availability in an archive.  multi_output files would yield
-        an instance of P per relevant file.
+    ''' A subclass of PluginFactory would override create so that
+        certain plugins would be created based on file availability
+        in an archive.  multi_output files would yield an instance
+        of P per relevant file.
     '''
 
     def create(self, P):
@@ -185,25 +215,10 @@ class PluginFactory(object):
     def plugins(self):
         return Registry.registry
 
-    def dependency_met(self, dep, graph):
-        return dep.plugin in graph
-
     def verify_deps(self, P, deps, graph):
         if P.__policies__:
-            return all([p.accept(self, deps, graph) for p in P.__policies__])
+            return all([p.accept(deps) for p in P.__policies__])
         return True
-
-    def resolve_dep(self, dep, graph):
-        if dep.plugin not in graph:
-            if dep.optional:
-                dp = None
-            else:
-                raise Exception('Missing Dependency: %s' % dep.name)
-        else:
-            dp = graph[dep.plugin]
-            if dp._exception and not dep.on_error:
-                raise Exception('Dependency has exception: %s' % dep.name)
-        return dp
 
     def resolve_deps(self, P, graph):
         log.debug('Resolving %s', P.__name__)
@@ -211,7 +226,7 @@ class PluginFactory(object):
         log.debug('Graph: %s', graph)
         deps = {}
         for n, d in P.__requires__.iteritems():
-            deps[n] = self.resolve_dep(d, graph)
+            deps[n] = d.resolve(self, graph)
         log.debug('ResolvedDeps: %s', deps)
         return deps
 
@@ -234,7 +249,10 @@ class PluginFactory(object):
                 stack.append(cur)
                 stack.extend(deps)
 
-    def run_plugin(self, P, deps):
+    def run_plugin(self, p):
+        return p.process()
+
+    def _run_plugin(self, P, deps):
         ps = []
         for p in self.create(P):
             log.debug('Created %s', P.__name__)
@@ -243,7 +261,7 @@ class PluginFactory(object):
                 p._data[_type.plugin] = dep
                 setattr(p, name, dep)
             try:
-                p.process()
+                p.output = self.run_plugin(p)
             except Exception as pe:
                 log.exception(pe)
                 p._exception = pe
@@ -259,7 +277,7 @@ class PluginFactory(object):
                 deps = self.resolve_deps(P, graph)
                 if not self.verify_deps(P, deps, graph):
                     continue
-                results = self.run_plugin(P, deps)
+                results = self._run_plugin(P, deps)
                 if results:
                     graph[P] = results if len(results) > 1 else results[0]
             except Exception as e:
@@ -281,24 +299,10 @@ class ClusterPluginFactory(PluginFactory):
     def plugins(self):
         return Registry.cluster_registry
 
-    def resolve_deps(self, P, graph):
-        log.debug('Resolving %s', P.__name__)
-        log.debug('DependsOn: %s', P.__requires__)
-        log.debug('Role Graph: %s', self.graphs)
-        log.debug('Graph: %s', graph)
-        deps = {}
-        for n, d in P.__requires__.iteritems():
-            if isinstance(d, ClusterDependency):
-                # dig things out of self.graphs for the deps
-                pass
-            else:
-                deps[n] = self.resolve_dep(d, graph)
-        log.debug('ResolvedDeps: %s', deps)
-        return deps
-
 
 def reducer(requires=[], kind=Plugin):
     '''Syntactic sugar.
+
        Decorator for creating plugins out of functions.
        Leave kind as Plugin for regular plugins and set
        to ClusterPlugin for plugins that should work on

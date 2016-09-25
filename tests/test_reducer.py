@@ -12,6 +12,12 @@ class B(Plugin):
     def process(self):
         self.log.info(self.a)
 
+class C(Plugin):
+    enabled = False
+
+    def process(self):
+        self.log.info(self.a)
+
 
 @reducer(requires=[A])
 def redc(shared):
@@ -25,8 +31,25 @@ def red(shared):
     shared.log.info(shared.b)
 
 
+@reducer(requires=[[B, C]])
+def D(shared):
+    shared.log.info(shared.b)
+
+
+#@reducer(requires=[C])
+#def E(shared):
+#    shared.log.info(shared.b)
+
+
 class TestRunPlugins(TestCase):
 
-    def test_run_plugins(self):
+    def test_reducer(self):
         graph = PluginFactory().run_plugins()
         self.assertTrue(not any(p._exception for p in graph.values()))
+
+    def test_any(self):
+        graph = PluginFactory().run_plugins()
+        self.assertTrue(D in graph)
+        self.assertTrue(graph[D].b is not None)
+        self.assertTrue(graph[D].c is None)
+

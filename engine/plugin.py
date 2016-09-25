@@ -133,7 +133,7 @@ class ClusterDependency(Dependency):
 
     def __init__(self, plugin, role=None, **kwargs):
         self.role = role
-        super(ClusterDependency, self, **kwargs)
+        super(ClusterDependency, self).__init__(plugin, **kwargs)
 
 
 class PluginFactory(object):

@@ -9,8 +9,7 @@ log = logging.getLogger(__name__)
 
 
 class Registry(type):
-    registry = set()
-    cluster_registry = set()
+    registry = collections.defaultdict(set)
 
     def __init__(plugin_class, name, bases, attrs):
         if name not in ('Plugin', 'ClusterPlugin'):
@@ -51,7 +50,7 @@ class Plugin(object):
 
     @classmethod
     def _register(cls, registry):
-        registry.registry.add(cls)
+        registry.registry[Plugin].add(cls)
 
     def __getitem__(self, k):
         return self._data[k]
@@ -94,7 +93,7 @@ class Plugin(object):
 class ClusterPlugin(Plugin):
     @classmethod
     def _register(cls, registry):
-        registry.cluster_registry.add(cls)
+        registry.registry[ClusterPlugin].add(cls)
 
     @staticmethod
     def create_dependency(dep):
@@ -159,7 +158,7 @@ class Dep(object):
 class Dependency(object):
     '''Encapsulates a dependency between plugins.
 
-       A dependency may exist between Plugin <-> Plugin
+       A dependency may exist Plugin <-> Plugin
        or ClusterPlugin <-> ClusterPlugin but never mixed.'''
 
     def __init__(self, plugin, name=None, optional=False, on_error=False):
@@ -215,26 +214,23 @@ class PluginFactory(object):
 
     @property
     def plugins(self):
-        return Registry.registry
+        return Registry.registry[Plugin]
 
-    def verify_deps(self, P, deps):
-        if P.__policies__:
-            return all([p.accept(deps) for p in P.__policies__])
-        return True
+    def verify_deps(self, policies, deps):
+        return all([p.accept(deps) for p in policies])
 
-    def resolve_deps(self, P, graph):
-        log.debug('Resolving %s', P.__name__)
-        log.debug('DependsOn: %s', P.__requires__)
+    def resolve_deps(self, requires, graph):
+        log.debug('DependsOn: %s', requires)
         log.debug('Graph: %s', graph)
         deps = {}
-        for n, d in P.__requires__.iteritems():
+        for n, d in requires.iteritems():
             deps[n] = d.resolve(self, graph)
         log.debug('ResolvedDeps: %s', deps)
         return deps
 
     @staticmethod
     def run_order(plugins):
-        plugins = list(plugins)
+        plugins = sorted(plugins, key=lambda p: len(p.__requires__))
         stack = []
         seen = set()
         while plugins or stack:
@@ -262,7 +258,6 @@ class PluginFactory(object):
             try:
                 p.output = self.run_plugin(p)
             except Exception as pe:
-                log.exception(pe)
                 p._exception = pe
             ps.append(p)
         return ps
@@ -273,8 +268,9 @@ class PluginFactory(object):
             try:
                 if not P.enabled:
                     continue
-                deps = self.resolve_deps(P, graph)
-                if not self.verify_deps(P, deps):
+                log.debug('Resolving %s', P.__name__)
+                deps = self.resolve_deps(P.__requires__, graph)
+                if not self.verify_deps(P.__policies__, deps):
                     continue
                 results = self._run_plugin(P, deps)
                 if results:
@@ -296,7 +292,7 @@ class ClusterPluginFactory(PluginFactory):
 
     @property
     def plugins(self):
-        return Registry.cluster_registry
+        return Registry.registry[ClusterPlugin]
 
 
 def reducer(requires=[], kind=Plugin):

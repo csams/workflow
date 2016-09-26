@@ -242,6 +242,11 @@ class PluginFactory(object):
                 continue
             deps = set([r.plugin for r in cur.__requires__.values() if type(r) is Dependency]) - seen
             if not deps:
+                for _ in range(stack.count(cur)):
+                    stack.remove(cur)
+
+                for _ in range(plugins.count(cur)):
+                    plugins.remove(cur)
                 seen.add(cur)
                 yield cur
             else:

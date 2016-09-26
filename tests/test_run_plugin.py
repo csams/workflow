@@ -9,7 +9,7 @@ class A(Plugin):
 class B(Plugin):
     a = A
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
 
 
@@ -17,7 +17,7 @@ class C(Plugin):
     a = A
     b = B
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
         self.log.info(self.b)
 
@@ -26,7 +26,7 @@ class D(Plugin):
     a = Dep(A, optional=True)
     c = Dep(C, optional=True)
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
         self.log.info(self.c)
 
@@ -34,7 +34,7 @@ class D(Plugin):
 class E(Plugin):
     d = D
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.d)
 
 

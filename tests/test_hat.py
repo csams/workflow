@@ -2,17 +2,17 @@ from engine.plugin import Plugin, PluginFactory
 from unittest import TestCase
 
 class A(Plugin):
-    def process(self):
+    def process(self, local):
         pass
 
 class B(Plugin):
     a = A
-    def process(self):
+    def process(self, local):
         pass
 
 class C(Plugin):
     a = A
-    def process(self):
+    def process(self, local):
         pass
 
 class TestRunPlugins(TestCase):

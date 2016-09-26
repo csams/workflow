@@ -203,18 +203,17 @@ class PluginFactory(object):
         of P per relevant file.
     '''
 
-    def create(self, P):
+    def __init__(self):
+        self.plugins = Registry.registry[Plugin]
+
+    def create_plugin(self, P):
         yield P()
 
     def run_plugin(self, p):
-        return p.process()
-
-    @property
-    def plugins(self):
-        return Registry.registry[Plugin]
+        return p.process(p._data)
 
     def verify_deps(self, policies, deps):
-        return all([p.accept(deps) for p in policies])
+        return all(p.accept(deps) for p in policies)
 
     def resolve_deps(self, requires, graph):
         log.debug('DependsOn: %s', requires)
@@ -246,7 +245,7 @@ class PluginFactory(object):
 
     def _run_plugin(self, P, deps):
         ps = []
-        for p in self.create(P):
+        for p in self.create_plugin(P):
             log.debug('Created %s', P.__name__)
             for name, _type in P.__requires__.iteritems():
                 dep = deps.get(name)
@@ -286,10 +285,7 @@ class ClusterPluginFactory(PluginFactory):
 
     def __init__(self, graphs):
         self.graphs = graphs
-
-    @property
-    def plugins(self):
-        return Registry.registry[ClusterPlugin]
+        self.plugins = Registry.registry[ClusterPlugin]
 
 
 def reducer(requires=[], kind=Plugin):

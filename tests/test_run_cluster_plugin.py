@@ -12,7 +12,7 @@ class A(Plugin):
 class B(Plugin):
     a = A
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
 
 
@@ -20,7 +20,7 @@ class C(Plugin):
     a = A
     b = B
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
         self.log.info(self.b)
 
@@ -30,7 +30,7 @@ class D(Plugin):
     b = Dep(B, on_error=True)
     c = Dep(C, optional=True)
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
         self.log.info(self.c)
 
@@ -38,17 +38,17 @@ class D(Plugin):
 class E(Plugin):
     d = D
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.d)
 
 
 @reducer(kind=ClusterPlugin)
-def reduceA(shared):
+def reduceA(shared, local):
     log.info(shared)
 
 
 @reducer(requires=[reduceA], kind=ClusterPlugin)
-def reduceB(shared):
+def reduceB(shared, local):
     log.info(shared)
 
 

@@ -9,7 +9,7 @@ class A(Plugin):
 class B(Plugin):
     a = A
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
 
 
@@ -17,41 +17,41 @@ class C(Plugin):
     enabled = False
     a = A
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
 
 class D(Plugin):
     enabled = False
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
 
 
 class E(Plugin):
     __policies__ = [Any(a=A, c=C)]
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
         self.log.info(self.c)
 
 class F(Plugin):
     __policies__ = [Any(c=C, d=D)]
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.c)
         self.log.info(self.d)
 
 class G(Plugin):
     __policies__ = [All(a=A, b=B)]
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
         self.log.info(self.b)
 
 class H(Plugin):
     __policies__ = [All(a=A, c=C)]
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
         self.log.info(self.c)
 

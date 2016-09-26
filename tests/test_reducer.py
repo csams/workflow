@@ -9,30 +9,30 @@ class A(Plugin):
 class B(Plugin):
     a = A
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
 
 class C(Plugin):
     enabled = False
 
-    def process(self):
+    def process(self, local):
         self.log.info(self.a)
 
 
 @reducer(requires=[A])
-def redc(shared):
+def redc(shared, local):
     shared.log.info(shared.a)
     shared.thing = 4
 
 
 @reducer(requires=[redc, B])
-def red(shared):
+def red(shared, local):
     shared.log.info(shared.redc.thing)
     shared.log.info(shared.b)
 
 
 @reducer(requires=[[B, C]])
-def D(shared):
+def D(shared, local):
     shared.log.info(shared.b)
     shared.log.info(shared.c)
 

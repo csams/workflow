@@ -49,7 +49,7 @@ class Plugin(object):
     enabled = True
 
     def __init__(self):
-        self._data = {}
+        self._deps = {}
         self._exception = None
         cls = self.__class__
         self.log = logging.getLogger('.'.join([cls.__module__, cls.__name__]))
@@ -59,7 +59,7 @@ class Plugin(object):
         registry[Plugin].add(cls)
 
     def __getitem__(self, k):
-        return self._data[k]
+        return self._deps[k]
 
     def get(self, k, default=None):
         try:
@@ -68,7 +68,7 @@ class Plugin(object):
             return default
 
     def __contains__(self, k):
-        return k in self._data
+        return k in self._deps
 
     def __call__(self, *args, **kwargs):
         return self.process(*args, **kwargs)
@@ -217,7 +217,7 @@ class PluginFactory(object):
         yield P()
 
     def run_plugin(self, p):
-        return p.process(p._data)
+        return p.process(p._deps)
 
     def verify_deps(self, policies, deps):
         return all(p.accept(deps) for p in policies)
@@ -234,26 +234,20 @@ class PluginFactory(object):
     @staticmethod
     def run_order(plugins):
         plugins = sorted(plugins, key=lambda p: len(p.__requires__))
-        stack = []
         seen = set()
-        while plugins or stack:
-            cur = stack.pop() if stack else plugins.pop()
-            if cur in seen:
-                continue
-            deps = set([r.plugin for r in cur.__requires__.values() if type(r) is Dependency]) - seen
-            if not deps:
-                for _ in range(stack.count(cur)):
-                    stack.remove(cur)
-
-                for _ in range(plugins.count(cur)):
-                    plugins.remove(cur)
-                seen.add(cur)
-                yield cur
-            else:
-                if cur in stack:
-                    raise Exception('Dependency Cycle: %s already in %s' % (cur, stack))
-                stack.append(cur)
-                stack.extend(deps)
+        while plugins:
+            acyclic = False
+            for p in plugins:
+                deps = set([r.plugin for r in p.__requires__.values() if type(r) is Dependency]) - seen
+                if deps:
+                    continue
+                else:
+                    acyclic = True
+                    seen.add(p)
+                    plugins.remove(p)
+                    yield p 
+            if not acyclic:
+                raise Exception('Cycle detected!')
 
     def _run_plugin(self, P, deps):
         ps = []
@@ -261,7 +255,7 @@ class PluginFactory(object):
             log.debug('Created %s', P.__name__)
             for name, _type in P.__requires__.iteritems():
                 dep = deps.get(name)
-                p._data[_type.plugin] = dep
+                p._deps[_type.plugin] = dep
                 setattr(p, name, dep)
             try:
                 p.output = self.run_plugin(p)

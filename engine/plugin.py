@@ -64,8 +64,8 @@ class Plugin(object):
     def __contains__(self, k):
         return k in self._data
 
-    def __call__(self):
-        return self.process()
+    def __call__(self, *args, **kwargs):
+        return self.process(*args, **kwargs)
 
     @staticmethod
     def create_dependency(dep):
@@ -181,11 +181,8 @@ class Dependency(object):
         return dp
 
     def met(self, deps):
-        dep_classes = set(dep.__class__ for dep in deps.values() if dep)
-        if self.plugin in dep_classes:
-            return True
-
-        return False
+        d = deps.get(self.name)
+        return d is not None
 
 
 class ClusterDependency(Dependency):

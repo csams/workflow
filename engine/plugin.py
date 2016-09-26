@@ -3,6 +3,7 @@
 import collections
 import logging
 import sys
+from toposort import toposort_flatten
 from types import MethodType
 
 log = logging.getLogger(__name__)
@@ -233,21 +234,10 @@ class PluginFactory(object):
 
     @staticmethod
     def run_order(plugins):
-        plugins = sorted(plugins, key=lambda p: len(p.__requires__))
-        seen = set()
-        while plugins:
-            acyclic = False
-            for p in plugins:
-                deps = set([r.plugin for r in p.__requires__.values() if type(r) is Dependency]) - seen
-                if deps:
-                    continue
-                else:
-                    acyclic = True
-                    seen.add(p)
-                    plugins.remove(p)
-                    yield p 
-            if not acyclic:
-                raise Exception('Cycle detected!')
+        graph = {}
+        for p in plugins:
+            graph[p] = set(r.plugin for r in p.__requires__.values() if type(r) is Dependency)
+        return toposort_flatten(graph)
 
     def _run_plugin(self, P, deps):
         ps = []

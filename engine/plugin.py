@@ -10,10 +10,15 @@ log = logging.getLogger(__name__)
 
 class Registry(type):
     registry = collections.defaultdict(set)
+    plugin_bases = set()
+
+    @classmethod
+    def add_base(cls, base):
+        cls.plugin_bases.add(base)
 
     def __init__(plugin_class, name, bases, attrs):
-        if name not in ('Plugin', 'ClusterPlugin'):
-            plugin_class._register(Registry)
+        if name not in Registry.plugin_bases:
+            plugin_class._register(Registry.registry)
 
             requires = {}
             for k, v in attrs.iteritems():
@@ -36,6 +41,7 @@ class Registry(type):
             super(Registry, plugin_class).__init__(name, bases, attrs)
 
 
+Registry.add_base('Plugin')
 class Plugin(object):
     __metaclass__ = Registry
     __policies__ = []
@@ -50,7 +56,7 @@ class Plugin(object):
 
     @classmethod
     def _register(cls, registry):
-        registry.registry[Plugin].add(cls)
+        registry[Plugin].add(cls)
 
     def __getitem__(self, k):
         return self._data[k]
@@ -86,14 +92,15 @@ class Plugin(object):
 
         return None
 
-    def process(self, *args):
+    def process(self, *args, **kwargs):
         return None
 
 
+Registry.add_base('ClusterPlugin')
 class ClusterPlugin(Plugin):
     @classmethod
     def _register(cls, registry):
-        registry.registry[ClusterPlugin].add(cls)
+        registry[ClusterPlugin].add(cls)
 
     @staticmethod
     def create_dependency(dep):
@@ -258,8 +265,7 @@ class PluginFactory(object):
             ps.append(p)
         return ps
 
-    def run_plugins(self):
-        graph = {}
+    def run_plugins(self, graph={}):
         for P in self.run_order(self.plugins):
             try:
                 if not P.enabled:
@@ -288,7 +294,7 @@ class ClusterPluginFactory(PluginFactory):
         self.plugins = Registry.registry[ClusterPlugin]
 
 
-def reducer(requires=[], kind=Plugin):
+def reducer(requires=[], optional=[], cluster=False, kind=Plugin, enabled=True):
     '''Syntactic sugar.
 
        Decorator for creating plugins out of functions.
@@ -296,10 +302,14 @@ def reducer(requires=[], kind=Plugin):
        to ClusterPlugin for plugins that should work on
        cluster archives.
     '''
+    if cluster:
+        kind = ClusterPlugin
 
     def wrapper(func):
         attrs = {}
         policies = []
+
+        # create required dependencies
         for r in requires:
             if isinstance(r, Policy):
                 policies.append(r)
@@ -312,7 +322,19 @@ def reducer(requires=[], kind=Plugin):
                 r = kind.create_dependency(r)
                 if r:
                     name = r.name if r.name else r.plugin.__name__.lower()
+                    r.name = name
                     attrs[name] = r
+
+        # create optional dependencies
+        for r in optional:
+            r = kind.create_dependency(r)
+            if r:
+                r.optional=True
+                name = r.name if r.name else r.plugin.__name__.lower()
+                r.name = name
+                attrs[name] = r
+
+        attrs['enabled'] = enabled
         attrs['__module__'] = func.__module__
         attrs['__policies__'] = policies
         cls = type(func.__name__, (kind,), attrs)

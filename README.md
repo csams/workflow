@@ -24,7 +24,7 @@ class B(Plugin):
         self.log.info(self.a)
 ```
 
-If a dependency is optional, use the `Dep` helper class, with the `optional` keyword:
+If a dependency is optional, use the `Dep` helper class with the `optional` keyword:
 
 ```python
 
@@ -38,8 +38,8 @@ class B(Plugin):
 ```
 
 If a dependency should be provided even if it threw an exception during processing,
-use the `Dep` helper class with the `on_error` keyword.  If the dependency threw
-an error, it is accessible through the `_exception` attribute.
+use the `Dep` helper class with the `on_error` keyword.  If the dependency throws
+an exception, it will be accessible through the `_exception` attribute.
 
 ```python
 class A(Plugin):
@@ -52,7 +52,7 @@ class B(Plugin):
         self.log.info(self.a._exception)
 ```
 
-Combine `optional` and `on_error` if you always want to execute regardless of the dependency's
+Combine `optional` and `on_error` if the plugin should always execute regardless of a dependency's
 state.
 
 ```python
@@ -81,7 +81,7 @@ class B(Plugin):
 class C(Plugin):
     __policies__ = [Any(a=A, b=B)]
     def process(self):
-        self.log.info('One of these should not be None.')
+        self.log.info('One of self.a and self.b should not be None.')
         self.log.info(self.a)
         self.log.info(self.b)
 ```

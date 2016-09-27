@@ -80,8 +80,8 @@ class Plugin(object):
             p = dep.plugin
             if issubclass(p, Plugin):
                 return Dependency(p, **dep.kwargs)
+            raise Exception('Invalid dependency %s' % p)
 
-            raise Exception('Invalid Dependency: %s' % dep.plugin)
         if type(dep) is Dependency:
             return dep
 
@@ -164,10 +164,11 @@ class Dep(object):
 
 
 class Dependency(object):
-    '''Encapsulates a dependency between plugins.
+    ''' Encapsulates a dependency between plugins.
 
-       A dependency may exist Plugin <-> Plugin
-       or ClusterPlugin <-> ClusterPlugin but never mixed.'''
+        A dependency may exist Plugin <-> Plugin
+        or ClusterPlugin <-> ClusterPlugin but never mixed.
+    '''
 
     def __init__(self, plugin, name=None, optional=False, on_error=False):
         self.plugin = plugin
@@ -194,7 +195,9 @@ class Dependency(object):
 
 
 class ClusterDependency(Dependency):
-    '''Encapsulates a dependency between a ClusterPlugin and previous execution graphs.'''
+    ''' Encapsulates a dependency between a ClusterPlugin and Plugin
+        instances in previous execution graphs.
+    '''
 
     def __init__(self, plugin, role=None, **kwargs):
         self.role = role
@@ -232,10 +235,9 @@ class PluginFactory(object):
         log.debug('ResolvedDeps: %s', deps)
         return deps
 
-    @staticmethod
-    def run_order(plugins):
+    def run_order(self):
         graph = {}
-        for p in plugins:
+        for p in self.plugins:
             graph[p] = set(r.plugin for r in p.__requires__.values() if type(r) is Dependency)
         return toposort_flatten(graph)
 
@@ -255,7 +257,7 @@ class PluginFactory(object):
         return ps
 
     def run_plugins(self, graph={}):
-        for P in self.run_order(self.plugins):
+        for P in self.run_order():
             try:
                 if not P.enabled:
                     continue
@@ -283,7 +285,7 @@ class ClusterPluginFactory(PluginFactory):
         self.plugins = Registry.registry[ClusterPlugin]
 
 
-def reducer(requires=[], optional=[], cluster=False, kind=Plugin, enabled=True):
+def plugin(requires=[], optional=[], kind=Plugin, enabled=True):
     '''Syntactic sugar.
 
        Decorator for creating plugins out of functions.
@@ -291,9 +293,6 @@ def reducer(requires=[], optional=[], cluster=False, kind=Plugin, enabled=True):
        to ClusterPlugin for plugins that should work on
        cluster archives.
     '''
-    if cluster:
-        kind = ClusterPlugin
-
     def wrapper(func):
         attrs = {}
         policies = []
@@ -332,3 +331,7 @@ def reducer(requires=[], optional=[], cluster=False, kind=Plugin, enabled=True):
         setattr(mod, func.__name__, cls)
         return cls
     return wrapper
+
+def reducer(requires=[], optional=[], cluster=False, enabled=True):
+    kind = Plugin if not cluster else ClusterPlugin
+    return plugin(requires=requires, kind=kind, enabled=enabled)

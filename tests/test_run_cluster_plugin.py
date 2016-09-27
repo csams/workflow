@@ -42,12 +42,12 @@ class E(Plugin):
         self.log.info(self.d)
 
 
-@reducer(kind=ClusterPlugin)
+@reducer(cluster=True)
 def reduceA(shared, local):
     log.info(shared)
 
 
-@reducer(requires=[reduceA], kind=ClusterPlugin)
+@reducer(requires=[reduceA], cluster=True)
 def reduceB(shared, local):
     log.info(shared)
 

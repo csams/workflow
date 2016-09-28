@@ -1,22 +1,23 @@
 import logging
-from engine.plugin import Dep, Plugin, ClusterPlugin, PluginFactory, ClusterPluginFactory, reducer
+from engine.plugin import Dep
+from engine.reducer import reducer, Reducer, ReducerFactory, ClusterReducerFactory
 from unittest import TestCase
 
 log = logging.getLogger(__name__)
 
 
-class A(Plugin):
+class A(Reducer):
     pass
 
 
-class B(Plugin):
+class B(Reducer):
     a = A
 
     def process(self, local):
         self.log.info(self.a)
 
 
-class C(Plugin):
+class C(Reducer):
     a = A
     b = B
 
@@ -25,7 +26,7 @@ class C(Plugin):
         self.log.info(self.b)
 
 
-class D(Plugin):
+class D(Reducer):
     a = Dep(A, optional=True)
     b = Dep(B, on_error=True)
     c = Dep(C, optional=True)
@@ -35,14 +36,14 @@ class D(Plugin):
         self.log.info(self.c)
 
 
-class E(Plugin):
+class E(Reducer):
     d = D
 
     def process(self, local):
         self.log.info(self.d)
 
 
-@reducer(cluster=True)
+@reducer(requires=[], cluster=True)
 def reduceA(shared, local):
     log.info(shared)
 
@@ -64,8 +65,8 @@ class TestRunPlugins(TestCase):
         # Each PluginFactory graph is a dictionary of the form
         # {PluginClass: PluginClass instance(s)}
 
-        graph = PluginFactory().run_plugins()
+        graph = ReducerFactory().run_plugins()
         self.assertTrue(not any(p._exception for p in graph.values()))
         graphs = {'some_role?': graph}
-        graph = ClusterPluginFactory(graphs).run_plugins()
+        graph = ClusterReducerFactory(graphs).run_plugins()
         self.assertTrue(not any(p._exception for p in graph.values()))

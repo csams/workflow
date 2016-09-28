@@ -1,14 +1,20 @@
 from collections import defaultdict
-from engine.plugin import Plugin, PluginFactory, Registry
+from engine.plugin import plugin, Plugin, PluginFactory, Registry
+
 
 class MapperOutputFactory(PluginFactory):
 
     __symbolic_map__ = defaultdict(set)
     ''' Map from target name to MapperOuput classes to process them. '''
 
+    __filter_map__ = defaultdict(set)
+    ''' Map from target name to filters that should be applied to their contents. '''
+
     @classmethod
     def add_mapper(cls, name, plugin_class):
-        cls.__symbolic_map__[name].append(plugin_class)
+        if plugin_class.enabled:
+            cls.__symbolic_map__[name].add(plugin_class)
+            cls.__filter_map__[name] |= set(plugin_class.__filter_map__)
 
     def __init__(self, archive):
         self.plugins = Registry.registry[MapperOutput]
@@ -32,12 +38,9 @@ class MapperOutput(Plugin):
         self.data = data
         self.path = path
 
-    def process(self, *args, **kwargs):
-        pass
-
     @classmethod
     def _register(cls, registry):
-        if cls.__target__:
+        if cls.enabled and cls.__target__:
             registry[MapperOutput].add(cls)
             MapperOutputFactory.add_mapper(cls.__target__, cls)
 
@@ -48,3 +51,24 @@ class MapperOutput(Plugin):
     @staticmethod
     def parse_content(content):
         pass
+
+
+def mapper(target, filters=set(), enabled=True):
+    ''' Syntactic sugar to create a MapperOutput class. '''
+
+    def _wrap(thing):
+        try:
+            if issubclass(thing, MapperOutput):
+                thing.__target__ = target
+                thing.__filters__ = filters
+                thing.enabled = enabled
+                MapperOutputFactory.add_mapper(target, thing)
+            else:
+                raise Exception('%s is not a MapperOutput subclass.' % thing)
+        except:
+            attrs = {
+                '__target__': target,
+                '__filters__': filters
+            }
+            return plugin(kind=MapperOutput, enabled=enabled, attrs=attrs)
+    return _wrap 

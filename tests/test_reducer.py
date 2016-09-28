@@ -1,18 +1,18 @@
-from engine.plugin import Plugin, PluginFactory, reducer
+from engine.reducer import reducer, Reducer, ReducerFactory
 from unittest import TestCase
 
 
-class A(Plugin):
+class A(Reducer):
     pass
 
 
-class B(Plugin):
+class B(Reducer):
     a = A
 
     def process(self, local):
         self.log.info(self.a)
 
-class C(Plugin):
+class C(Reducer):
     enabled = False
 
     def process(self, local):
@@ -40,11 +40,11 @@ def D(shared, local):
 class TestRunPlugins(TestCase):
 
     def test_reducer(self):
-        graph = PluginFactory().run_plugins()
+        graph = ReducerFactory().run_plugins()
         self.assertTrue(not any(p._exception for p in graph.values()))
 
     def test_any(self):
-        graph = PluginFactory().run_plugins()
+        graph = ReducerFactory().run_plugins()
         self.assertTrue(D in graph)
         self.assertTrue(graph[D].b is not None)
         self.assertTrue(graph[D].c is None)

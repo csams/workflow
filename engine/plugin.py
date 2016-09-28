@@ -72,15 +72,15 @@ class Plugin(object):
         return k in self._deps
 
     def __call__(self, *args, **kwargs):
-        return self.process(*args, **kwargs)
+        return self.do_process(*args, **kwargs)
 
-    @staticmethod
-    def create_dependency(dep):
+    @classmethod
+    def create_dependency(cls, dep):
         if isinstance(dep, Dep):
             p = dep.plugin
             if issubclass(p, Plugin):
                 return Dependency(p, **dep.kwargs)
-            raise Exception('Invalid dependency %s' % p)
+            raise Exception('Invalid dependency %s on %s' % (cls, p))
 
         if type(dep) is Dependency:
             return dep
@@ -93,8 +93,11 @@ class Plugin(object):
 
         return None
 
+    def do_process(self, *args, **kwargs):
+        return self.process(*args, **kwargs)
+
     def process(self, *args, **kwargs):
-        return None
+        pass
 
 
 Registry.add_base('ClusterPlugin')
@@ -103,33 +106,43 @@ class ClusterPlugin(Plugin):
     def _register(cls, registry):
         registry[ClusterPlugin].add(cls)
 
-    @staticmethod
-    def create_dependency(dep):
+    @classmethod
+    def create_dependency(cls, dep):
         if isinstance(dep, Dep):
             p = dep.plugin
             if issubclass(p, ClusterPlugin):
+                log.info('Creating Dependency %s(%s) on %s(%s)' % (cls, cls.__bases__, dep.plugin, dep.plugin.__bases__))
                 return Dependency(p, **dep.kwargs)
 
             if issubclass(p, Plugin):
+                log.info('Creating ClusterDependency %s(%s) on %s(%s)' % (cls, cls.__bases__, dep.plugin, dep.plugin.__bases__))
                 return ClusterDependency(p, **dep.kwargs)
 
-            raise Exception('Invalid Dependency: %s' % dep.plugin)
+            raise Exception('Invalid Dependency %s on %s' % (cls, p))
+
+        if type(dep) is ClusterDependency:
+            log.info('Validating ClusterDependency %s(%s) on %s(%s)' % (cls, cls.__bases__, dep.plugin, dep.plugin.__bases__))
+            if not issubclass(dep.plugin, Plugin):
+                raise Exception('Invalid ClusterDependency %s on %s' % (cls, dep.plugin))
+            return dep
 
         if type(dep) is Dependency:
+            log.info(dep)
+            log.info('Validating Dependency %s(%s) on %s(%s)' % (cls, cls.__bases__, dep.plugin, dep.plugin.__bases__))
             if not issubclass(dep.plugin, ClusterPlugin):
-                raise Exception('Invalid Dependency: %s' % dep.plugin)
+                raise Exception('Invalid Dependency %s on %s' % (cls, dep.plugin))
             return dep
 
         try:
             if issubclass(dep, ClusterPlugin):
+                log.info('Creating default Dependency %s(%s) on %s(%s)' % (cls, cls.__bases__, dep.plugin, dep.plugin.__bases__))
                 return Dependency(dep)
 
             if issubclass(dep, Plugin):
+                log.info('Creating default Dependency %s(%s) on %s(%s)' % (cls, cls.__bases__, dep.plugin, dep.plugin.__bases__))
                 return ClusterDependency(dep)
         except:
             pass
-
-        return None
 
 
 class Policy(object):
@@ -193,6 +206,13 @@ class Dependency(object):
         d = deps.get(self.name)
         return d is not None
 
+    def __repr__(self):
+        plugin = self.plugin
+        plugin = '.'.join([plugin.__module__, plugin.__name__])
+        dep = '.'.join([self.__class__.__module__, self.__class__.__name__])
+        args = (dep, plugin, self.name, self.optional, self.on_error)
+        return '%s(%s, name="%s", optional=%s, on_error=%s)' % args
+
 
 class ClusterDependency(Dependency):
     ''' Encapsulates a dependency between a ClusterPlugin and Plugin
@@ -205,6 +225,13 @@ class ClusterDependency(Dependency):
 
     def resolve(self, factory, graph):
         return None
+
+    def __repr__(self):
+        plugin = self.plugin
+        plugin = '.'.join([plugin.__module__, plugin.__name__])
+        dep = '.'.join([self.__class__.__module__, self.__class__.__name__])
+        args = (dep, plugin, self.role, self.name, self.optional, self.on_error)
+        return '%s(%s, role="%s", name="%s", optional=%s, on_error=%s)' % args
 
 
 class PluginFactory(object):
@@ -221,7 +248,7 @@ class PluginFactory(object):
         yield P()
 
     def run_plugin(self, p):
-        return p.process(p._deps)
+        return p.do_process(p._deps)
 
     def verify_deps(self, policies, deps):
         return all(p.accept(deps) for p in policies)
@@ -285,7 +312,7 @@ class ClusterPluginFactory(PluginFactory):
         self.plugins = Registry.registry[ClusterPlugin]
 
 
-def plugin(requires=[], optional=[], kind=Plugin, enabled=True):
+def plugin(requires=[], optional=[], kind=Plugin, enabled=True, attrs={}):
     '''Syntactic sugar.
 
        Decorator for creating plugins out of functions.
@@ -293,9 +320,10 @@ def plugin(requires=[], optional=[], kind=Plugin, enabled=True):
        to ClusterPlugin for plugins that should work on
        cluster archives.
     '''
+
     def wrapper(func):
-        attrs = {}
         policies = []
+        _attrs = attrs if attrs else {}
 
         # create required dependencies
         for r in requires:
@@ -311,7 +339,7 @@ def plugin(requires=[], optional=[], kind=Plugin, enabled=True):
                 if r:
                     name = r.name if r.name else r.plugin.__name__.lower()
                     r.name = name
-                    attrs[name] = r
+                    _attrs[name] = r
 
         # create optional dependencies
         for r in optional:
@@ -320,18 +348,14 @@ def plugin(requires=[], optional=[], kind=Plugin, enabled=True):
                 r.optional=True
                 name = r.name if r.name else r.plugin.__name__.lower()
                 r.name = name
-                attrs[name] = r
+                _attrs[name] = r
 
-        attrs['enabled'] = enabled
-        attrs['__module__'] = func.__module__
-        attrs['__policies__'] = policies
-        cls = type(func.__name__, (kind,), attrs)
+        _attrs['enabled'] = enabled
+        _attrs['__module__'] = func.__module__
+        _attrs['__policies__'] = policies
+        cls = type(func.__name__, (kind,), _attrs)
         cls.process = MethodType(func, None, cls)
         mod = sys.modules[func.__module__]
         setattr(mod, func.__name__, cls)
         return cls
     return wrapper
-
-def reducer(requires=[], optional=[], cluster=False, enabled=True):
-    kind = Plugin if not cluster else ClusterPlugin
-    return plugin(requires=requires, kind=kind, enabled=enabled)

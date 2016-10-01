@@ -1,6 +1,5 @@
 import collections
 from engine.registry import Plugin, Registry, wrap
-from engine.reducer import Reducers
 
 
 Registry.add_base('MapperOutput')
@@ -12,7 +11,6 @@ class MapperOutput(Plugin):
     @classmethod
     def register(cls, registry):
         registry.add_plugin(MapperOutput, cls)
-        Reducers.add_module_level_dependency(cls)
                 
     def __init__(self, data, path=None):
         self.data = data

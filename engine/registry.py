@@ -8,6 +8,7 @@ import sys
 class Registry(type):
     registry = collections.defaultdict(set)
     bases = set()
+    plugins_by_module = collections.defaultdict(lambda: collections.defaultdict(set))
     
     @classmethod
     def add_base(cls, name):
@@ -16,6 +17,7 @@ class Registry(type):
     @classmethod
     def add_plugin(cls, base, plugin_class):
         cls.registry[base].add(plugin_class)
+        cls.plugins_by_module[base][plugin_class.__module__].add(plugin_class)
     
     def __init__(plugin_class, name, bases, attrs):
         if name not in Registry.bases:
@@ -75,14 +77,14 @@ class Plugin(object):
     def all_not_clustered(cls):
         return set(p for p in cls.registry.get(cls) if not p.cluster)
 
+    @classmethod
+    def from_module(cls, module):
+        return cls.plugins_by_module.get(cls, {}).get(module, set())
+
     # useful for finding mappers that aren't MapperOutput's yet..
     @classmethod
     def delegators(cls):
         return set(p for p in cls.registry.get(cls) if p.delegate)
-
-    @classmethod
-    def add_module_level_dependency(cls, plugin):
-        pass
 
     @classmethod
     def module_dependencies(cls):
@@ -118,6 +120,7 @@ class Plugin(object):
         pass
 
     def __call__(self, *args, **kwargs):
+        self.depends |= self.module_dependencies()
         missing_requirements = self.get_missing_requirements(kwargs)
         if not self.requires or not missing_requirements:
             self.resolve_deps(kwargs)

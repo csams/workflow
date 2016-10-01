@@ -1,5 +1,6 @@
 from collections import defaultdict
 from engine.registry import Plugin, Registry, stringify_requirements, wrap
+from engine.mapper import Mappers
 from engine.util import box, flatten
 
 
@@ -13,13 +14,9 @@ class Reducer(Plugin):
         registry.add_plugin(Reducer, cls)
 
     @classmethod
-    def add_module_level_dependency(cls, mapper):
-        cls.mappers_by_module[mapper.__module__].add(mapper)
-
-    @classmethod
     def module_dependencies(cls):
-        return cls.mappers_by_module.get(cls.__module__, set())
-        
+        return Mappers.from_module(cls.__module__)
+
     # reducer specific registry method.  "rule" is just a 
     # non shared reducer.
     @classmethod

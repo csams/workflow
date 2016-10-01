@@ -4,7 +4,7 @@ from toposort import toposort_flatten
 def run_order(plugins):
     graph = {}
     for p in plugins:
-        graph[p] = plugins.depends
+        graph[p] = p.depends
     return toposort_flatten(graph)
 
 

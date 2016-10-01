@@ -27,6 +27,14 @@ class MapperOutput(Plugin):
         return MapperOutput.symbols_by_mapper.get(plugin_class, set())
 
     @classmethod
+    def local_mappers(cls):
+        results = []
+        for module, c in cls.plugins_by_module.iteritems():
+            if len(c) > 1 and cls in c:
+                results.extend(c[cls])
+        return sorted(results)
+
+    @classmethod
     def add_file(cls, file_, filters=[]):
         cls.mappers_by_symbol[file_].add(cls)
         cls.symbols_by_mapper[cls].add(file_)

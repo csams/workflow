@@ -87,14 +87,6 @@ class Plugin(object):
         return set(p for p in cls.registry.get(cls) if p.delegate)
 
     @classmethod
-    def local_mappers(cls):
-        results = []
-        for module, c in cls.plugins_by_module.iteritems():
-            if len(c) > 1 and cls in c:
-                results.extend(c[cls])
-        return sorted(results)
-
-    @classmethod
     def module_dependencies(cls):
         return set()
 

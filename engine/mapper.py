@@ -1,74 +1,59 @@
-from collections import defaultdict
-from engine.plugin import plugin, Plugin, PluginFactory, Registry
-
-
-class MapperOutputFactory(PluginFactory):
-
-    __symbolic_map__ = defaultdict(set)
-    ''' Map from target name to MapperOuput classes to process them. '''
-
-    __filter_map__ = defaultdict(set)
-    ''' Map from target name to filters that should be applied to their contents. '''
-
-    @classmethod
-    def add_mapper(cls, name, plugin_class):
-        if plugin_class.enabled:
-            cls.__symbolic_map__[name].add(plugin_class)
-            cls.__filter_map__[name] |= set(plugin_class.__filter_map__)
-
-    def __init__(self, archive):
-        self.plugins = Registry.registry[MapperOutput]
-        self.archive = archive
-        self.cur_context = None
-
-    def run_order(self):
-        pass
-
-    def create_plugin(self, P):
-        pass
+import collections
+from engine.registry import Plugin, Registry, wrap
+from engine.reducer import Reducers
 
 
 Registry.add_base('MapperOutput')
 class MapperOutput(Plugin):
-
-    __target__ = None
-    __filters__ = set()
-
+    mappers_by_symbol = collections.defaultdict(set)
+    symbols_by_mapper = collections.defaultdict(set)
+    filters = collections.defaultdict(set)
+    
+    @classmethod
+    def register(cls, registry):
+        registry.add_plugin(MapperOutput, cls)
+        Reducers.add_module_level_dependency(cls)
+                
     def __init__(self, data, path=None):
         self.data = data
         self.path = path
+        self._exception = None
+
+    # a few mapper specific registry methods
+    @classmethod
+    def for_symbol(cls, name):
+        return cls.mappers_by_symbol.get(name, set())
 
     @classmethod
-    def _register(cls, registry):
-        if cls.enabled and cls.__target__:
-            registry[MapperOutput].add(cls)
-            MapperOutputFactory.add_mapper(cls.__target__, cls)
+    def symbols_for(cls, plugin_class):
+        return MapperOutput.symbols_by_mapper.get(plugin_class, set())
 
+    @classmethod
+    def add_file(cls, file_, filters=[]):
+        cls.mappers_by_symbol[file_].add(cls)
+        cls.symbols_by_mapper[cls].add(file_)
+        cls.filters[file_] |= set(filters)
+    
     @classmethod
     def parse_context(cls, context):
-        return cls(cls.parse_content(context.content), context.path)
-
-    @staticmethod
-    def parse_content(content):
+        if cls.delegate:
+            result = cls.delegate(context)
+            return result if isinstance(result, MapperOutput) else cls(result, context.path)
+        return cls(cls.process_content(context.content, context.path))
+    
+    @classmethod
+    def process_content(cls, content, path=None):
         pass
+    
 
+# alias for mapper plugin registry
+Mappers = MapperOutput
 
-def mapper(target, filters=set(), enabled=True):
-    ''' Syntactic sugar to create a MapperOutput class. '''
-
-    def _wrap(thing):
-        try:
-            if issubclass(thing, MapperOutput):
-                thing.__target__ = target
-                thing.__filters__ = filters
-                thing.enabled = enabled
-                MapperOutputFactory.add_mapper(target, thing)
-            else:
-                raise Exception('%s is not a MapperOutput subclass.' % thing)
-        except:
-            attrs = {
-                '__target__': target,
-                '__filters__': filters
-            }
-            return plugin(kind=MapperOutput, enabled=enabled, attrs=attrs)
-    return _wrap 
+# decorator to register a mapper to consume files.
+# Wrap a mapper func in a MapperOutput class if necessary.
+def mapper(name, filters=[], cluster=False, shared=False):
+    def _f(m):
+        m = wrap(m, kind=MapperOutput, cluster=cluster, shared=shared)
+        m.add_file(name, filters)
+        return m
+    return _f

@@ -17,7 +17,7 @@ class Registry(type):
     @classmethod
     def add_plugin(cls, base, plugin_class):
         cls.registry[base].add(plugin_class)
-        cls.plugins_by_module[base][plugin_class.__module__].add(plugin_class)
+        cls.plugins_by_module[plugin_class.__module__][base].add(plugin_class)
     
     def __init__(plugin_class, name, bases, attrs):
         if name not in Registry.bases:
@@ -79,12 +79,20 @@ class Plugin(object):
 
     @classmethod
     def from_module(cls, module):
-        return cls.plugins_by_module.get(cls, {}).get(module, set())
+        return cls.plugins_by_module.get(module, {}).get(cls, set())
 
     # useful for finding mappers that aren't MapperOutput's yet..
     @classmethod
     def delegators(cls):
         return set(p for p in cls.registry.get(cls) if p.delegate)
+
+    @classmethod
+    def local_mappers(cls):
+        results = []
+        for module, c in cls.plugins_by_module.iteritems():
+            if len(c) > 1 and cls in c:
+                results.extend(c[cls])
+        return sorted(results)
 
     @classmethod
     def module_dependencies(cls):

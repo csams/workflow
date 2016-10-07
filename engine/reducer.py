@@ -1,4 +1,3 @@
-from collections import defaultdict
 from engine.registry import Plugin, Registry, stringify_requirements, wrap
 from engine.mapper import Mappers
 from engine.util import box, flatten
@@ -6,8 +5,6 @@ from engine.util import box, flatten
 
 Registry.add_base('Reducer')
 class Reducer(Plugin):
-
-    mappers_by_module = defaultdict(set)
 
     @classmethod
     def register(cls, registry):

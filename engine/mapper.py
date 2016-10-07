@@ -35,7 +35,7 @@ class MapperOutput(Plugin):
         return sorted(results)
 
     @classmethod
-    def add_file(cls, file_, filters=[]):
+    def add_symbol(cls, file_, filters=[]):
         cls.mappers_by_symbol[file_].add(cls)
         cls.symbols_by_mapper[cls].add(file_)
         cls.filters[file_] |= set(filters)
@@ -60,6 +60,6 @@ Mappers = MapperOutput
 def mapper(name, filters=[], cluster=False, shared=False):
     def _f(m):
         m = wrap(m, kind=MapperOutput, cluster=cluster, shared=shared)
-        m.add_file(name, filters)
+        m.add_symbol(name, filters)
         return m
     return _f
